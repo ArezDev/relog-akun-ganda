@@ -37,7 +37,7 @@ async function relogFB(cokis, index) {
     const dismiss = fs.readFileSync(__dirname + '/tools/dismiss.js', 'utf-8');
     try {
         const domain = '.facebook.com';
-        await page.goto('https://facebook.com/');
+        await page.goto('https://facebook.com/?locale=id_ID', { waitUntil: 'networkidle2' });
         const cookies = parseCookie(cokis, domain);
         if (cookies.length > 0) {
             await page.browserContext().setCookie(...cookies);
