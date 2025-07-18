@@ -33,7 +33,8 @@ async function relogFB(cokis, index) {
     const page = await browser.newPage();
 
     // Extract email and password from cokis string
-    const [email, password] = cokis.split('|');
+    //const [email, password] = cokis.split('|');
+    const [email, password, twofactor] = cokis.split('|');
     const dismiss = fs.readFileSync(__dirname + '/tools/dismiss.js', 'utf-8');
     try {
         const domain = '.facebook.com';
@@ -62,14 +63,77 @@ async function relogFB(cokis, index) {
             return; // Keluar dari fungsi jika login gagal
         }
        
-        if (page.url().match(/601051028565049/)) {
+        if (page.url().includes("601051028565049")) {
+            console.log(`${waktu()}[${email}] : Akun Dismiss wait...`);
              await page.evaluate(dismiss);
              await delay(15000); // Tunggu 15 detik untuk memastikan dismiss selesai
-        }
+        } else if (page.url().includes("two_step_verification")) {
+            console.log(`${waktu()}[${email}] : Verifikasi 2FA proses...`);
+            console.log(`${waktu()}[${twofactor}] : Mengambil kode OTP dari API...`);
 
-        await delay(5000); // Tunggu 7 detik sebelum menjalankan script upload
+            try {
+                const response = await axios.get(`https://2fa.fb.rip/api/otp/${twofactor}`);
+
+                if (response?.data?.data?.otp && response?.data?.ok) {
+                    const otpCode = response?.data?.data?.otp;
+                    console.log(`${waktu()}[${email}] : Verifikasi 2FA dengan kode: ${otpCode}`);
+
+                    await page.evaluate(async (otp) => {
+                        const encryptedContext = window.location.href.split('?encrypted_context=')[1].split('&flow=')[0];
+                        console.log(encryptedContext);
+                        if (otp && encryptedContext) {
+                            const payload = new URLSearchParams({
+                                fb_api_caller_class: 'RelayModern',
+                                fb_api_req_friendly_name: 'useTwoFactorLoginValidateCodeMutation',
+                                variables: JSON.stringify({
+                                    code: { sensitive_string_value: otp },
+                                    method: "TOTP",
+                                    flow: "TWO_FACTOR_LOGIN",
+                                    encryptedContext: encryptedContext,
+                                    maskedContactPoint: null,
+                                    next_uri: null
+                                }),
+                                server_timestamps: 'true',
+                                doc_id: '9527647890665779',
+                                ...require('getAsyncParams')('POST')
+                            });
+
+                            fetch("/api/graphql/", {
+                                headers: {
+                                    "content-type": "application/x-www-form-urlencoded"
+                                },
+                                body: payload,
+                                method: "POST"
+                            }).then(async res=>{
+                                if (typeof res.json === 'function') {
+                                    return res.json();
+                                } else {
+                                    const text = await res.text();
+                                    try {
+                                        return JSON.parse(text);
+                                    } catch (e) {
+                                        console.error("Gagal parse JSON:", text);
+                                        return {};
+                                    }
+                                }
+                            });
+                        }
+                    }, otpCode);
+
+                    await delay(7000); // Tunggu agar proses lanjut setelah submit OTP
+                    await page.goto('https://facebook.com/?sk=welcome', { waitUntil: 'networkidle2', timeout: 15000 });
+                    console.log(`${waktu()}[${email}] : Verifikasi 2FA berhasil.`);
+                } else {
+                    console.warn(`${waktu()}[${email}] : OTP tidak valid atau tidak tersedia dari API.`);
+                }
+            } catch (err) {
+                console.error(`${waktu()}[${email}] : Gagal mengambil OTP:`, err.message);
+            }
+        }
+        //return;
+        await delay(7000); // Tunggu 7 detik sebelum menjalankan script upload
         //Upload sampul dan profil
-        //console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
+        console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
         var fotoProfil = await getImageBase64();
         var fotoSampul = await getCoverImageBase64();
         var js = fs.readFileSync('./tools/upload_foto_clone.js', 'utf-8');
@@ -205,8 +269,8 @@ async function relogFB(cokis, index) {
                                     : `${waktu()}[${email}] : LIVE!`);
 
             // ⬇️ tulis baris 
-            fs.appendFileSync(filename,
-            `${email}|${password}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
+            //fs.appendFileSync(filename, `${email}|${password}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
+            fs.appendFileSync(filename, `${email}|${password}|${twofactor}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
         } catch (e) {
             console.warn(`${waktu()}[!] Gagal cek akun ${email}:`, e.message);
         }
@@ -287,11 +351,11 @@ async function relogFB(cokis, index) {
         return;      // lanjutkan loop, jangan hentikan program
     } finally {
       // tutup kalau masih terbuka
-        if (browser) {
-            try {
-            await browser.close();        // kalau sudah tertutup akan melempar → ditangkap
-            } catch (_) { /* abaikan */ }
-        }
+        // if (browser) {
+        //     try {
+        //     await browser.close();        // kalau sudah tertutup akan melempar → ditangkap
+        //     } catch (_) { /* abaikan */ }
+        // }
     }
     
 };
@@ -309,7 +373,7 @@ const parseCookie = (cookieStr, domain) => {
                 path: '/',
             };
         })
-        .filter(cookie => ['sb', 'datr'].includes(cookie.name));
+        .filter(cookie => ['datr'].includes(cookie.name));
 };
 
 (async () => {
