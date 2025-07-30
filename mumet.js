@@ -17,7 +17,7 @@ async function relogFB(cokis, index) {
         return `[ ${hh}:${mm} ]`;
     };
     // Atur posisi window ke kanan berdasarkan index
-    const windowX = 320 * index;
+    const windowX = 125 * index;
     // Tambahkan delay berdasarkan index agar tidak membuka browser bersamaan
     await delay(index * 5_000); // Delay 5 detik per index
     const browser = await puppeteer.launch({
@@ -33,8 +33,8 @@ async function relogFB(cokis, index) {
     const page = await browser.newPage();
 
     // Extract email and password from cokis string
-    //const [email, password] = cokis.split('|');
-    const [email, password, twofactor] = cokis.split('|');
+    const [email, password] = cokis.split('|');
+    //const [email, password, twofactor] = cokis.split('|');
     const dismiss = fs.readFileSync(__dirname + '/tools/dismiss.js', 'utf-8');
     try {
         const domain = '.facebook.com';
@@ -133,7 +133,7 @@ async function relogFB(cokis, index) {
         //return;
         await delay(7000); // Tunggu 7 detik sebelum menjalankan script upload
         //Upload sampul dan profil
-        console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
+        //console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
         var fotoProfil = await getImageBase64();
         var fotoSampul = await getCoverImageBase64();
         var js = fs.readFileSync('./tools/upload_foto_clone.js', 'utf-8');
@@ -144,11 +144,11 @@ async function relogFB(cokis, index) {
             }, 5000); // Tunggu 5 detik sebelum upload foto sampul
         `);
         await delay(5000); // Tunggu 5 detik untuk memastikan upload selesai
-        //console.log(`${waktu()}[${email}] : Profile and cover photos uploaded successfully.`);
-        await delay(7000); // Tunggu 7 detik sebelum menjalankan script lainnya
+        console.log(`${waktu()}[${email}] : Profile and cover photos uploaded successfully.`);
+        //await delay(7000); // Tunggu 7 detik sebelum menjalankan script lainnya
 
         // Jalankan script untuk memeriksa akun
-        console.log(`${waktu()}[${email}] : Proses...`);
+        console.log(`${waktu()}[${email}] : Loading create clone...`);
         await delay(5000); // Tunggu 5 detik sebelum menjalankan script Upload
         const result = await page.evaluate(async () => {
         /* ---------- helper di dalam browser ---------- */
@@ -269,8 +269,8 @@ async function relogFB(cokis, index) {
                                     : `${waktu()}[${email}] : LIVE!`);
 
             // ⬇️ tulis baris 
-            //fs.appendFileSync(filename, `${email}|${password}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
-            fs.appendFileSync(filename, `${email}|${password}|${twofactor}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
+            fs.appendFileSync(filename, `${email}|${password}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
+            //fs.appendFileSync(filename, `${email}|${password}|${twofactor}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
         } catch (e) {
             console.warn(`${waktu()}[!] Gagal cek akun ${email}:`, e.message);
         }
@@ -351,17 +351,17 @@ async function relogFB(cokis, index) {
         return;      // lanjutkan loop, jangan hentikan program
     } finally {
       // tutup kalau masih terbuka
-        // if (browser) {
-        //     try {
-        //     await browser.close();        // kalau sudah tertutup akan melempar → ditangkap
-        //     } catch (_) { /* abaikan */ }
-        // }
+        if (browser) {
+            try {
+            await browser.close();        // kalau sudah tertutup akan melempar → ditangkap
+            } catch (_) { /* abaikan */ }
+        }
     }
     
 };
 
 const parseCookie = (cookieStr, domain) => {
-    return cookieStr
+    const cookies = cookieStr
         .split(';')
         .map(cookie => {
             const [name, ...rest] = cookie.trim().split('=');
@@ -372,8 +372,15 @@ const parseCookie = (cookieStr, domain) => {
                 domain,
                 path: '/',
             };
-        })
-        .filter(cookie => ['datr'].includes(cookie.name));
+        });
+
+    // Check if 'presence' is present
+    const hasPresence = cookies.some(cookie => cookie.name === 'presence');
+    const allowedNames = hasPresence
+        ? ['datr', 'sb', 'presence']
+        : ['datr', 'sb'];
+
+    return cookies.filter(cookie => allowedNames.includes(cookie.name));
 };
 
 (async () => {
