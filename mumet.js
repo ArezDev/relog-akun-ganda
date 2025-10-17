@@ -7,7 +7,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 //const MAX_BROWSER = 10; // Maksimal 10 browser paralel
 
-async function relogFB(cokis, index) {
+async function relogFB(cokis, index, mode) {
 
     //Helper untuk waktu
     const waktu = () => {
@@ -40,8 +40,19 @@ async function relogFB(cokis, index) {
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36');
         await delay(2000); // Delay 2 detik sebelum mulai proses
         const domain = '.facebook.com';
-        await page.goto('https://facebook.com/?locale=id_ID', { waitUntil: 'networkidle2' });
-        const cookies = parseCookie(cokis, domain);
+        await page.goto('https://facebook.com/?sk=welcome', { waitUntil: 'networkidle2' });
+        // Login mode
+        if (mode === 'y') {
+        // Gunakan semua cookie
+        const cookies = parseCookie(cokis, domain, true); // true full cokis login
+        if (cookies.length > 0) {
+            await page.browserContext().setCookie(...cookies);
+            await page.reload({ waitUntil: 'networkidle2' });
+        }
+        await page.waitForNavigation({ waitUntil: 'networkidle2'}).catch(() => {});
+        } else {
+        // Gunakan cookie terbatas (datr, sb, presence)
+        const cookies = parseCookie(cokis, domain, false); // true full cokis login
         if (cookies.length > 0) {
             await page.browserContext().setCookie(...cookies);
             await page.reload({ waitUntil: 'networkidle2' });
@@ -52,6 +63,7 @@ async function relogFB(cokis, index) {
         await page.click('[name="login"]');
         await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
         await delay(5000); // Tunggu 5 detik untuk memastikan login selesai
+        }
 
         // Cek apakah login berhasil
         const loggedIn = await page.evaluate(() => {
@@ -314,9 +326,8 @@ async function relogFB(cokis, index) {
             const res  = await axios.get(`https://graph.facebook.com/${email}/picture?type=normal`,
                                         { maxRedirects: 0, validateStatus: null });
             const href = res.headers?.location || '';
-            const isCheckpoint = href.includes('C5yt7Cqf3zU');
-            console.log(isCheckpoint ? `${waktu()}[${email}] : Checkpoint!`
-                                    : `${waktu()}[${email}] : LIVE!`);
+            //const isCheckpoint = href.includes('C5yt7Cqf3zU');
+            //console.log(isCheckpoint ? `${waktu()}[${email}] : Checkpoint!` : `${waktu()}[${email}] : LIVE!`);
 
             // ⬇️ tulis baris 
             fs.appendFileSync(filename, `${email}|${password}| ;${cookieStr}; |SUKSES_GANDA: ${cloneId || ''}\n`);
@@ -410,27 +421,58 @@ async function relogFB(cokis, index) {
     
 };
 
-const parseCookie = (cookieStr, domain) => {
+// const parseCookie = (cookieStr, domain) => {
+//     const cookies = cookieStr
+//         .split(';')
+//         .map(cookie => {
+//             const [name, ...rest] = cookie.trim().split('=');
+//             const value = rest.join('=');
+//             return {
+//                 name,
+//                 value,
+//                 domain,
+//                 path: '/',
+//             };
+//         });
+
+//     // Check if 'presence' is present
+//     const hasPresence = cookies.some(cookie => cookie.name === 'presence');
+//     const allowedNames = hasPresence
+//         ? ['datr', 'sb', 'presence']
+//         : ['datr', 'sb'];
+
+//     return cookies.filter(cookie => allowedNames.includes(cookie.name));
+// };
+
+const parseCookie = (cookieStr, domain, includeAll = true) => {
+    if (!cookieStr || typeof cookieStr !== 'string') return [];
+
+    // Pisahkan dan ubah setiap pasangan name=value jadi objek cookie
     const cookies = cookieStr
         .split(';')
         .map(cookie => {
             const [name, ...rest] = cookie.trim().split('=');
             const value = rest.join('=');
             return {
-                name,
-                value,
+                name: name.trim(),
+                value: value.trim(),
                 domain,
                 path: '/',
             };
-        });
+        })
+        .filter(cookie => cookie.name); // Hindari cookie tanpa nama
 
-    // Check if 'presence' is present
-    const hasPresence = cookies.some(cookie => cookie.name === 'presence');
-    const allowedNames = hasPresence
-        ? ['datr', 'sb', 'presence']
-        : ['datr', 'sb'];
+    // Jika includeAll = false, filter berdasarkan nama cookie tertentu
+    if (!includeAll) {
+        const hasPresence = cookies.some(cookie => cookie.name === 'presence');
+        const allowedNames = hasPresence
+            ? ['datr', 'sb', 'presence']
+            : ['datr', 'sb'];
+        return cookies.filter(cookie => allowedNames.includes(cookie.name));
+    }
 
-    return cookies.filter(cookie => allowedNames.includes(cookie.name));
+    // Jika includeAll = true, return semua cookies
+    return cookies;
 };
 
 (async () => {
@@ -439,9 +481,21 @@ const parseCookie = (cookieStr, domain) => {
         output: process.stdout
     });
 
-    const MAX_BROWSER = await new Promise(resolve => {
-        rl.question('Masukkan jumlah browser paralel (MAX_BROWSER): ', answer => {
+    const LOGIN_MODE = await new Promise(resolve => {
+        rl.question('Login full cokis (y/n): ', answer => {
             rl.close();
+            resolve(answer.trim().toLowerCase() === 'y' ? 'y' : 'n');
+        });
+    });
+
+    const rl2 = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    const MAX_BROWSER = await new Promise(resolve => {
+        rl2.question('Masukkan jumlah browser paralel (MAX_BROWSER): ', answer => {
+            rl2.close();
             resolve(Number(answer) || 1);
         });
     });
@@ -457,7 +511,7 @@ const parseCookie = (cookieStr, domain) => {
         // Ambil batch sebanyak MAX_BROWSER
         const batch = lines.slice(idx, idx + MAX_BROWSER);
         await Promise.all(
-            batch.map((line, i) => relogFB(line.trim(), i))
+            batch.map((line, i) => relogFB(line.trim(), i, LOGIN_MODE))
         );
         idx += MAX_BROWSER;
         // Delay antar batch jika ingin (misal 2 detik)
