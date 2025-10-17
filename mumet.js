@@ -37,6 +37,8 @@ async function relogFB(cokis, index) {
     //const [email, password, emailId, twofactor] = cokis.split('|');
     const dismiss = fs.readFileSync(__dirname + '/tools/dismiss.js', 'utf-8');
     try {
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36');
+        await delay(2000); // Delay 2 detik sebelum mulai proses
         const domain = '.facebook.com';
         await page.goto('https://facebook.com/?locale=id_ID', { waitUntil: 'networkidle2' });
         const cookies = parseCookie(cokis, domain);
@@ -66,7 +68,8 @@ async function relogFB(cokis, index) {
         if (page.url().includes("601051028565049")) {
             console.log(`${waktu()}[${email}] : Akun Dismiss wait...`);
              await page.evaluate(dismiss);
-             await delay(15000); // Tunggu 15 detik untuk memastikan dismiss selesai
+             await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+             //await delay(15000); // Tunggu 15 detik untuk memastikan dismiss selesai
         } else if (page.url().includes("two_step_verification")) {
             console.log(`${waktu()}[${email}] : Verifikasi 2FA proses...`);
             console.log(`${waktu()}[${twofactor}] : Mengambil kode OTP dari API...`);
@@ -130,8 +133,7 @@ async function relogFB(cokis, index) {
                 console.error(`${waktu()}[${email}] : Gagal mengambil OTP:`, err.message);
             }
         }
-        //return;
-        await delay(5000); // Tunggu 7 detik sebelum menjalankan script upload
+        await delay(5000);
         //Upload sampul dan profil
         //console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
         //var fotoProfil = await getImageFromFIle();
@@ -146,7 +148,6 @@ async function relogFB(cokis, index) {
         `);
         await delay(5000); // Tunggu 5 detik untuk memastikan upload selesai
         //console.log(`${waktu()}[${email}] : Profile and cover photos uploaded successfully.`);
-        //await delay(7000); // Tunggu 7 detik sebelum menjalankan script lainnya
 
         // Jalankan script untuk memeriksa akun
         //console.log(`${waktu()}[${email}] : Loading create clone...`);
