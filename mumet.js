@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const readline = require('readline');
 const fs = require('fs');
 const axios = require('axios');
-const { getImageBase64, getCoverImageBase64 } = require('./tools/get_img');
+const { getImageBase64, getCoverImageBase64, getImageFromFIle } = require('./tools/get_img');
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 //const MAX_BROWSER = 10; // Maksimal 10 browser paralel
@@ -34,7 +34,7 @@ async function relogFB(cokis, index) {
 
     // Extract email and password from cokis string
     const [email, password] = cokis.split('|');
-    //const [email, password, twofactor] = cokis.split('|');
+    //const [email, password, emailId, twofactor] = cokis.split('|');
     const dismiss = fs.readFileSync(__dirname + '/tools/dismiss.js', 'utf-8');
     try {
         const domain = '.facebook.com';
@@ -131,9 +131,10 @@ async function relogFB(cokis, index) {
             }
         }
         //return;
-        await delay(7000); // Tunggu 7 detik sebelum menjalankan script upload
+        await delay(5000); // Tunggu 7 detik sebelum menjalankan script upload
         //Upload sampul dan profil
         //console.log(`${waktu()}[${email}] : Uploading profile and cover photos...`);
+        //var fotoProfil = await getImageFromFIle();
         var fotoProfil = await getImageBase64();
         var fotoSampul = await getCoverImageBase64();
         var js = fs.readFileSync('./tools/upload_foto_clone.js', 'utf-8');
@@ -144,12 +145,12 @@ async function relogFB(cokis, index) {
             }, 5000); // Tunggu 5 detik sebelum upload foto sampul
         `);
         await delay(5000); // Tunggu 5 detik untuk memastikan upload selesai
-        console.log(`${waktu()}[${email}] : Profile and cover photos uploaded successfully.`);
+        //console.log(`${waktu()}[${email}] : Profile and cover photos uploaded successfully.`);
         //await delay(7000); // Tunggu 7 detik sebelum menjalankan script lainnya
 
         // Jalankan script untuk memeriksa akun
-        console.log(`${waktu()}[${email}] : Loading create clone...`);
-        await delay(5000); // Tunggu 5 detik sebelum menjalankan script Upload
+        //console.log(`${waktu()}[${email}] : Loading create clone...`);
+        //await delay(5000); // Tunggu 5 detik sebelum menjalankan script Upload
         const result = await page.evaluate(async () => {
         /* ---------- helper di dalam browser ---------- */
         const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -202,10 +203,58 @@ async function relogFB(cokis, index) {
 
         // ---------- 3. coba create clone ----------
         const randDigit = n => [...Array(n)].map(() => Math.floor(Math.random() * 10)).join('');
-        const names     = ["Emily","Madison","Emma","Olivia","Hannah","Abigail","Alexis",
-                            "Isabella","Samantha","Ashley","Jessica","Sarah","Alyssa","Lauren",
-                            "Taylor","Brianna","Kayla","Megan","Victoria","Natalie"];
-        const nm        = names[Math.floor(Math.random() * names.length)];
+
+        function randomUSName(gender = null) {
+            const maleFirstNames = [
+                "Michael","David","James","Robert","John",
+                "William","Richard","Thomas","Charles","Mark",
+                "Steven","Daniel","Paul","Brian","Kevin",
+                "Scott","Timothy","Jeffrey","George","Edward"
+            ];
+
+            const femaleFirstNames = [
+                "Mary","Jennifer","Patricia","Linda","Elizabeth",
+                "Barbara","Susan","Jessica","Sarah","Karen",
+                "Nancy","Lisa","Betty","Margaret","Sandra",
+                "Ashley","Kimberly","Emily","Donna","Michelle"
+            ];
+
+            const middleNames = [
+                "Allen","Lee","Joseph","Patrick","Ray","Wayne",
+                "Anne","Marie","Lynn","Grace","Renee",
+                "Christopher","Frank","Martin","Douglas"
+            ];
+
+            const lastNames = [
+                "Smith","Johnson","Williams","Brown","Jones",
+                "Miller","Davis","Garcia","Rodriguez","Wilson",
+                "Martinez","Anderson","Taylor","Thomas","Harris",
+                "Clark","Lewis","Walker","Hall","Allen"
+            ];
+
+            // fungsi bantu
+            function pick(arr) {
+                return arr[Math.floor(Math.random() * arr.length)];
+            }
+
+            // jika gender tidak ditentukan → pilih acak
+            if (!gender) {
+                gender = Math.random() < 0.5 ? "male" : "female";
+            }
+
+            const first = gender === "male" ? pick(maleFirstNames) : pick(femaleFirstNames);
+            const last = pick(lastNames);
+
+            // 50% ada middle name
+            if (Math.random() < 0.5) {
+                return `${first} ${pick(middleNames)} ${last}`;
+            } else {
+                return `${first} ${last}`;
+            }
+        }
+
+        let jenengku = randomUSName('female');
+        let ngaran = jenengku.toLowerCase().split(' ')[0]; // ambil first name saja, lowercaseq
 
         try {
             const createResp = await fetch('/api/graphql/', {
@@ -215,8 +264,8 @@ async function relogFB(cokis, index) {
                 fb_api_req_friendly_name: 'AdditionalProfileCreateMutation',
                 variables: JSON.stringify({
                 input: {
-                    name           : nm,
-                    user_name      : `${nm}.${randDigit(6)}`,
+                    name           : jenengku,
+                    user_name      : `${ngaran}.${randDigit(6)}`,
                     source         : 'PROFILE_SWITCHER_UNIFIED_CREATION',
                     cover_photo    : { existing_cover_photo_id: fotoSampul,
                                     focus: { x: 0.5, y: 0.5 } },

@@ -6,7 +6,7 @@ const path = require('path');
  * @returns {Promise<string>} Base64 encoded image with data URL prefix
  */
 async function getImageBase64() {
-    const randomNum = Math.floor(Math.random() * 15) + 1;
+    const randomNum = Math.floor(Math.random() * 101) + 1;
     // Use remote image, no local file read
     const url = `https://raw.githubusercontent.com/ArezDev/usa_new_img/refs/heads/main/a%20(${randomNum}).jpg`;
     const response = await axios.get(url, { responseType: 'arraybuffer' });
